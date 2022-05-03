@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/rsa"
+	"crypto/ed25519"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -943,20 +943,23 @@ func newUserKey(pubKeyFile string) (*userKey, error) {
 		return userKey, nil
 	}
 
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, errors.New("Failed to generate key pair")
 	}
-	userKey.PublicKey, err = ssh.NewPublicKey(key.Public())
+	userKey.PublicKey, err = ssh.NewPublicKey(pub)
 	if err != nil {
 		return nil, errors.New("Failed to extract public key from generated key pair")
 	}
 
 	// To support Ansible calling back to us we need to write
 	// this file down
-	privateKeyDer := x509.MarshalPKCS1PrivateKey(key)
+	privateKeyDer, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return nil, errors.New("Failed to marshal")
+	}
 	privateKeyBlock := pem.Block{
-		Type:    "RSA PRIVATE KEY",
+		Type:    "ed25519 PRIVATE KEY",
 		Headers: nil,
 		Bytes:   privateKeyDer,
 	}
@@ -999,12 +1002,12 @@ func newSigner(privKeyFile string) (*signer, error) {
 		return signer, nil
 	}
 
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, errors.New("Failed to generate server key pair")
 	}
 
-	signer.Signer, err = ssh.NewSignerFromKey(key)
+	signer.Signer, err = ssh.NewSignerFromKey(priv)
 	if err != nil {
 		return nil, errors.New("Failed to extract private key from generated key pair")
 	}
